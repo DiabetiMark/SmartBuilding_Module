@@ -38,8 +38,6 @@
 -IC:\Users\DiabetiMark\.platformio\packages\framework-arduinoespressif32\cores\esp32
 -IC:\Users\DiabetiMark\.platformio\packages\framework-arduinoespressif32\variants\esp32
 -IE:\Storage\Projecten\School\SmartBuilding_Module\SmartBuilding_Module\src
--IE:\Storage\Projecten\School\SmartBuilding_Module\SmartBuilding_Module\.piolibdeps\PubSubClient_ID89\src
--IE:\Storage\Projecten\School\SmartBuilding_Module\SmartBuilding_Module\lib\WiFi\src
 -IC:\Users\DiabetiMark\.platformio\lib\PubSubClient_ID89\src
 -IC:\Users\DiabetiMark\.platformio\lib\WifiManager_ID567
 -IC:\Users\DiabetiMark\.platformio\packages\framework-arduinoespressif32\libraries\ArduinoOTA\src
