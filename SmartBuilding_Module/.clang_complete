@@ -39,6 +39,7 @@
 -IC:\Users\Markm\.platformio\packages\framework-arduinoespressif32\variants\esp32
 -ID:\Projecten\GitHub\SmartBuilding_Module\SmartBuilding_Module\src
 -IC:\Users\Markm\.platformio\lib\PubSubClient_ID89\src
+-ID:\Projecten\GitHub\SmartBuilding_Module\SmartBuilding_Module\lib\WiFi\src
 -IC:\Users\Markm\.platformio\packages\framework-arduinoespressif32\libraries\ArduinoOTA\src
 -IC:\Users\Markm\.platformio\packages\framework-arduinoespressif32\libraries\BLE\src
 -IC:\Users\Markm\.platformio\packages\framework-arduinoespressif32\libraries\DNSServer\src
