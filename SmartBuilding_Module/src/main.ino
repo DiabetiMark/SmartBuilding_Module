@@ -84,7 +84,8 @@ while(true){
 
 // This method prints a message to the Serial when debug mode is enabled.
 void printMsg(String msg){
-  Serial.println(msg);
+  if(DEBUG)
+    Serial.println(msg);
 }
 
 /*
