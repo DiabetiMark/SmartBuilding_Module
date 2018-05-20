@@ -1,19 +1,22 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
-
+#include <DHT.h>
 const bool DEBUG = true;
 
 // SENSORY VARIABLES
 // Sensor mapping
-const int SENSPIN_TEMP = 5;
+const int SENSPIN_DHT = 5;
 const int SENSPIN_REED = 16;
 const int SENSPIN_METHANE = 17;
 const int SENSPIN_MOTION = 18;
 
+//Sensor Defining
+#define DHTTYPE DHT22
+DHT dht(SENSPIN_DHT, DHTTYPE);
 // Available sensor pins [19,21,22,23,24,34,35]
 const int sPinsSize = 10;
-int sensorPins[sPinsSize] = {SENSPIN_TEMP, SENSPIN_REED, SENSPIN_METHANE, SENSPIN_MOTION};
+int sensorPins[sPinsSize] = {SENSPIN_DHT, SENSPIN_REED, SENSPIN_METHANE, SENSPIN_MOTION};
 
 // connected sensor check
 bool connectedPins[sPinsSize];
@@ -57,8 +60,8 @@ void setup() {
       printMsg("Booting...");
   }
   // Run sensor connection check.
-  readSensors();
   sensorMapper();
+  readSensors();
   // MultiCore initialization
 /*
   batton = xSemaphoreCreateMutex();
@@ -82,7 +85,6 @@ void setup() {
 
 void loop() {
   // Primary core tasks, such as communications here, to avoid unwanted behaviour.
-  printMsg("Running Core 1");
   delay(1000);
 }
 
@@ -161,12 +163,18 @@ void sensorMapper(){
           // Connected
           connectedPins[i] = true;
           pinMode(i, INPUT);
+          // Set required variable if pin is connected.
+          if(pin == SENSPIN_DHT) {
+            dht.begin();
+          }
         } else {
           // Set pinmode to OUTPUT to conserve energy.
           pinMode(i, OUTPUT);
         }
     }
   }
+  pinMode(22, OUTPUT);
+  digitalWrite(22, HIGH);
   printMsg("=================");
   for(int i = 0; i < sPinsSize; i++){
     if(connectedPins[i]){
@@ -182,7 +190,7 @@ void readSensors(){
   StaticJsonBuffer<2000> globalBuffer;
 
   // ====  START DUMMY TEST SECTION, REMOVE ON DISTRIBUTION ====
-  for(int i = 0; i < sPinsSize; i++){
+  /*for(int i = 0; i < sPinsSize; i++){
     connectedPins[i] = true;
   }
 // DHT22
@@ -214,29 +222,49 @@ void readSensors(){
   dataSet3[0][2] = "false";
 
   // ==== STOP DUMMY TEST SECTION, REMOVE ON DISTRIBUTION ====
+  */
   for(int i = 0; i < 4; i++){
     // Check whether the pin mapper found a connection to read.
     if(connectedPins[i] != 0){
       int sPin = sensorPins[i];
-        if(sPin == SENSPIN_TEMP) {
-            //TODO: Make function that returns dataSet for the given sensor.
+        if(sPin == SENSPIN_DHT) {
+            // ==== START ACQUIRE DATASET ====
+            String dataSet[2][DATA_VARIABLE_COUNT];
+            dataSet[0][0] = "Temperature";
+            dataSet[0][1] = "DECIMAL";
+            float temp = dht.readTemperature();
+            dataSet[0][2] = isnan(temp) ? -1 : temp;
 
+            dataSet[1][0] = "Humidity";
+            dataSet[1][1] = "DECIMAL";
+            float humid = dht.readHumidity();
+            dataSet[1][2] =  isnan(humid) ? -1 : humid;
+            // ==== STOP ACQUIRE DATASET ====
             JsonObject& obj = globalBuffer.parseObject(JSON_SensorObject("DHT_01", "DHT22", 2, dataSet));
             SENSORS.add(obj);
         }else if(sPin == SENSPIN_REED){
-          //TODO: Make function that returns dataSet for the given sensor.
-
-          JsonObject& obj1 = globalBuffer.parseObject(JSON_SensorObject("REED_01", "Reed", 1, dataSet1));
+          // ==== START ACQUIRE DATASET ====
+          String dataSet[1][DATA_VARIABLE_COUNT];
+          dataSet[0][0] = "Status";
+          dataSet[0][1] = "BOOL";
+          dataSet[0][2] =  digitalRead(SENSPIN_REED);
+          JsonObject& obj1 = globalBuffer.parseObject(JSON_SensorObject("REED_01", "Reed", 1, dataSet));
           SENSORS.add(obj1);
         }else if(sPin == SENSPIN_METHANE){
+          String dataSet[2][DATA_VARIABLE_COUNT];
           //TODO: Make function that returns dataSet for the given sensor.
+          // ==== START ACQUIRE DATASET ====
 
-          JsonObject& obj2 = globalBuffer.parseObject(JSON_SensorObject("MQ4_01", "Methane", 1, dataSet2));
+          // ==== STOP ACQUIRE DATASET ====
+          JsonObject& obj2 = globalBuffer.parseObject(JSON_SensorObject("MQ4_01", "Methane", 1, dataSet));
           SENSORS.add(obj2);
         }else if(sPin == SENSPIN_MOTION){
+          String dataSet[2][DATA_VARIABLE_COUNT];
           //TODO: Make function that returns dataSet for the given sensor.
+          // ==== START ACQUIRE DATASET ====
 
-          JsonObject& obj3 = globalBuffer.parseObject(JSON_SensorObject("HC-SR501_01", "Motion", 1, dataSet3));
+          // ==== STOP ACQUIRE DATASET ====
+          JsonObject& obj3 = globalBuffer.parseObject(JSON_SensorObject("HC-SR501_01", "Motion", 1, dataSet));
           SENSORS.add(obj3);
         }
     }
