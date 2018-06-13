@@ -4,12 +4,20 @@
 #include <DHT.h>
 const bool DEBUG = true;
 
+// TIMING Variables
+unsigned long currentMillis, previousMillis;
+const int updateInterval = 5000;
+
 // SENSORY VARIABLES
 // Sensor mapping
+
 const int SENSPIN_DHT = 5;
 const int SENSPIN_REED = 16;
 const int SENSPIN_METHANE = 17;
 const int SENSPIN_MOTION = 18;
+
+// Default states
+bool SENSOR_MOTION_STATE = false;
 
 //Sensor Defining
 #define DHTTYPE DHT22
@@ -26,14 +34,17 @@ const int TASK_PRIO = 1;  // 1 > 0 <- Priority rating.
 const int TASK_CORE = 0;
 SemaphoreHandle_t batton;
 
+String statusUpdateMessage = "";
+bool hasNewMessage = false;
+
 
 // WiFI & MQTT VARIABLES
-const char* NET_SSID = ".";
-const char* NET_PASS = "1234567890";
+const char* NET_SSID = "The House";
+const char* NET_PASS = "jx8qxCkqBvsy";
 
-const char* mqtt_host = "217.122.39.160";
-const char* mqtt_user   = "SmartBuilding";
-const char* mqtt_pass   = "AareonStenden2018";
+const char* mqtt_host = "192.168.178.33";
+const char* mqtt_user   = "";
+const char* mqtt_pass   = "";
 const int   mqtt_port   = 1883;
 
 // JSON VARIABLES
@@ -61,9 +72,14 @@ void setup() {
   }
   // Run sensor connection check.
   sensorMapper();
-  readSensors();
   // MultiCore initialization
-/*
+
+  // WiFI & MQTT Initialization
+  WiFi.begin(NET_SSID, NET_PASS);
+  connectWiFi();
+  MQTT.setServer(mqtt_host, mqtt_port);
+  connectBroker();
+
   batton = xSemaphoreCreateMutex();
   // Assign Core processes and variables.
   xTaskCreatePinnedToCore(
@@ -74,28 +90,48 @@ void setup() {
                     TASK_PRIO,
                     NULL,
                     TASK_CORE);
-
-   // WiFI & MQTT Initialization
-   WiFi.begin(NET_SSID, NET_PASS);
-   connectWiFi();
-   MQTT.setServer(mqtt_host, mqtt_port);
-   connectBroker();
-   */
+   //readSensors();
 }
 
 void loop() {
   // Primary core tasks, such as communications here, to avoid unwanted behaviour.
-  delay(1000);
+  xSemaphoreTake(batton, portMAX_DELAY);
+  if(hasNewMessage) {
+      printMsg("[UpdateCycle] Update publish status: " + (String)MQTT.publish(stringToChar("DiabetiMark/API/State"), stringToChar(statusUpdateMessage)));
+      hasNewMessage = false;
+  }
+  xSemaphoreGive(batton);
 }
 
 void coreTask_II( void * pvParameters ){
 // Repeating core cycle
 while(true){
-  // Secondary core tasks here.
-  // xSemaphoreTake(batton, portMAX_DELAY);
-  // xSemaphoreGive(batton);
-  readSensors();
-  delay(5000);
+  currentMillis = millis();
+
+
+  // Check whether motion has been detected.
+  if(digitalRead(SENSPIN_MOTION)) {
+    SENSOR_MOTION_STATE = true;
+  }
+
+  /*
+  *   ============================================
+  *   ============ UPDATE CYCLE TIMER ============
+  *   ============================================
+  */
+  if(currentMillis - previousMillis >= updateInterval) {
+    //Execute sensor read
+    previousMillis = currentMillis;
+    //TODO: Include readSensor method here. Also clear the PIR's state to 'false'.
+    xSemaphoreTake(batton, portMAX_DELAY);
+    statusUpdateMessage = readSensors();
+    hasNewMessage = true;
+    xSemaphoreGive(batton);
+
+    // Reset the motion detection cycle for the last update cycle.
+    SENSOR_MOTION_STATE = false;
+  }
+  vTaskDelay(10 / portTICK_PERIOD_MS);
   }
 }
 
@@ -135,14 +171,6 @@ void connectBroker() {
     }
   }
 }
-
-//TODO: FINISH THIS METHOD!
-void publishMsg(String topic, String payload){
-  if(!MQTT.connected())
-    connectBroker();
-  //MQTT.publish();
-}
-
 /*
 *   ============================================
 *   ==============SENSORY CODING================
@@ -183,88 +211,70 @@ void sensorMapper(){
   }
 }
 
-void readSensors(){
+String readSensors(){
   // ==== JSON HEADER ====
   JsonObject& root = jsonBuffer.createObject();
   JsonArray& SENSORS = root.createNestedArray("SENSORS");
   StaticJsonBuffer<2000> globalBuffer;
 
   // ====  START DUMMY TEST SECTION, REMOVE ON DISTRIBUTION ====
-  /*for(int i = 0; i < sPinsSize; i++){
+  for(int i = 0; i < 4; i++){
     connectedPins[i] = true;
   }
-// DHT22
-  String dataSet[2][DATA_VARIABLE_COUNT];
-  dataSet[0][0] = "Temperatuur";
-  dataSet[0][1] = "DECIMAL";
-  dataSet[0][2] = 20.5;
-
-  dataSet[1][0] = "Luchtvochtigheid";
-  dataSet[1][1] = "DECIMAL";
-  dataSet[1][2] = 68.5;
-
-  // REED
-  String dataSet1[2][DATA_VARIABLE_COUNT];
-  dataSet1[0][0] = "Status";
-  dataSet1[0][1] = "BOOL";
-  dataSet1[0][2] = "true";
-
-  // MQ4
-  String dataSet2[2][DATA_VARIABLE_COUNT];
-  dataSet2[0][0] = "Methaan";
-  dataSet2[0][1] = "DECIMAL";
-  dataSet2[0][2] = 5.5;
-
-  // Motion
-  String dataSet3[2][DATA_VARIABLE_COUNT];
-  dataSet3[0][0] = "Beweging";
-  dataSet3[0][1] = "BOOL";
-  dataSet3[0][2] = "false";
-
   // ==== STOP DUMMY TEST SECTION, REMOVE ON DISTRIBUTION ====
-  */
+
   for(int i = 0; i < 4; i++){
     // Check whether the pin mapper found a connection to read.
     if(connectedPins[i] != 0){
       int sPin = sensorPins[i];
         if(sPin == SENSPIN_DHT) {
+
             // ==== START ACQUIRE DATASET ====
             String dataSet[2][DATA_VARIABLE_COUNT];
-            dataSet[0][0] = "Temperature";
-            dataSet[0][1] = "DECIMAL";
+            dataSet[0][DATA_NAME] = "Temperature";
+            dataSet[0][DATA_FORMAT] = "DECIMAL";
+            // Read data
             float temp = dht.readTemperature();
-            dataSet[0][2] = isnan(temp) ? -1 : temp;
 
-            dataSet[1][0] = "Humidity";
-            dataSet[1][1] = "DECIMAL";
+            dataSet[0][DATA_VALUE] = isnan(temp) ? -1 : temp;
+
+            dataSet[1][DATA_NAME] = "Humidity";
+            dataSet[1][DATA_FORMAT] = "DECIMAL";
+            // Read data
             float humid = dht.readHumidity();
-            dataSet[1][2] =  isnan(humid) ? -1 : humid;
+
+            dataSet[1][DATA_VALUE] =  isnan(humid) ? -1 : humid;
             // ==== STOP ACQUIRE DATASET ====
+
             JsonObject& obj = globalBuffer.parseObject(JSON_SensorObject("DHT_01", "DHT22", 2, dataSet));
             SENSORS.add(obj);
         }else if(sPin == SENSPIN_REED){
           // ==== START ACQUIRE DATASET ====
-          String dataSet[1][DATA_VARIABLE_COUNT];
-          dataSet[0][0] = "Status";
-          dataSet[0][1] = "BOOL";
-          dataSet[0][2] =  digitalRead(SENSPIN_REED);
-          JsonObject& obj1 = globalBuffer.parseObject(JSON_SensorObject("REED_01", "Reed", 1, dataSet));
+          String dataSet1[1][DATA_VARIABLE_COUNT];
+          dataSet1[0][DATA_NAME] = "Status";
+          dataSet1[0][DATA_FORMAT] = "BOOL";
+          dataSet1[0][DATA_VALUE] =  digitalRead(SENSPIN_REED);
+          JsonObject& obj1 = globalBuffer.parseObject(JSON_SensorObject("REED_01", "Reed", 1, dataSet1));
           SENSORS.add(obj1);
         }else if(sPin == SENSPIN_METHANE){
-          String dataSet[2][DATA_VARIABLE_COUNT];
-          //TODO: Make function that returns dataSet for the given sensor.
+          String dataSet2[1][DATA_VARIABLE_COUNT];
           // ==== START ACQUIRE DATASET ====
+          float partsPerThousand = analogRead(SENSPIN_METHANE);
+          dataSet2[0][DATA_NAME] = "Status";
+          dataSet2[0][DATA_FORMAT] = "BOOL";
+          dataSet2[0][DATA_VALUE] =  (String)partsPerThousand;
 
           // ==== STOP ACQUIRE DATASET ====
-          JsonObject& obj2 = globalBuffer.parseObject(JSON_SensorObject("MQ4_01", "Methane", 1, dataSet));
+          JsonObject& obj2 = globalBuffer.parseObject(JSON_SensorObject("MQ4_01", "Methaan", 1, dataSet2));
           SENSORS.add(obj2);
         }else if(sPin == SENSPIN_MOTION){
-          String dataSet[2][DATA_VARIABLE_COUNT];
-          //TODO: Make function that returns dataSet for the given sensor.
+          String dataSet3[1][DATA_VARIABLE_COUNT];
           // ==== START ACQUIRE DATASET ====
-
+          dataSet3[0][DATA_NAME] = "Status";
+          dataSet3[0][DATA_FORMAT] = "BOOL";
+          dataSet3[0][DATA_VALUE] = (String)SENSOR_MOTION_STATE;
           // ==== STOP ACQUIRE DATASET ====
-          JsonObject& obj3 = globalBuffer.parseObject(JSON_SensorObject("HC-SR501_01", "Motion", 1, dataSet));
+          JsonObject& obj3 = globalBuffer.parseObject(JSON_SensorObject("HC-SR501_01", "Beweging", 1, dataSet3));
           SENSORS.add(obj3);
         }
     }
@@ -272,9 +282,10 @@ void readSensors(){
   // DEBUG PRINTING
   if(DEBUG)
     root.prettyPrintTo(Serial);
+
   String payload;
   root.printTo(payload);
-  //MQTT.publish("/SB/Module/" + "MODULE_ID_GOES_HERE" + "/Data", payload);
+  return payload;
 }
 
 String JSON_SensorObject(String sensorID, String sensorName, int dataCount, String dataSet[][DATA_VARIABLE_COUNT]) {
@@ -299,4 +310,11 @@ String JSON_SensorObject(String sensorID, String sensorName, int dataCount, Stri
   String generatedJson;
   SENSOR.printTo(generatedJson);
   return generatedJson;
+}
+
+char* stringToChar(String msg){
+  if(msg.length() != 0) {
+    char *output = const_cast<char*>(msg.c_str());
+    return output;
+  }
 }
