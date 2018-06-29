@@ -4,6 +4,19 @@
 #include <DHT.h>
 const bool DEBUG = true;
 
+
+// WiFI & MQTT VARIABLES
+const char* NET_SSID = "Public_AareonNL";
+const char * NET_PASS = "5iaspGEM!";
+
+const char* MQTT_HOST = "217.122.38.126";
+const char* MQTT_USER   = "aareon";
+const char* MQTT_PASS   = "AareonStenden2018";
+const int   MQTT_PORT   = 8883;
+
+String mqtt_topic = "";
+String  MAC;
+
 // TIMING Variables
 unsigned long currentMillis, previousMillis;
 const int updateInterval = 5000;
@@ -37,16 +50,6 @@ SemaphoreHandle_t batton;
 String statusUpdateMessage = "";
 bool hasNewMessage = false;
 
-
-// WiFI & MQTT VARIABLES
-const char* NET_SSID = "The House";
-const char* NET_PASS = "jx8qxCkqBvsy";
-
-const char* mqtt_host = "192.168.178.33";
-const char* mqtt_user   = "";
-const char* mqtt_pass   = "";
-const int   mqtt_port   = 1883;
-
 // JSON VARIABLES
 // Array Matrix Variables
 const int DATA_NAME = 0;
@@ -69,6 +72,7 @@ void setup() {
   if(DEBUG){
       while(!Serial){/* Wait for the Serial Monitor. */}
       printMsg("Booting...");
+      printMsg("Device ID: " + MAC);
   }
   // Run sensor connection check.
   sensorMapper();
@@ -76,8 +80,11 @@ void setup() {
 
   // WiFI & MQTT Initialization
   WiFi.begin(NET_SSID, NET_PASS);
+  MAC = WiFi.macAddress();
+  printMsg("Device ID: " + MAC);
+  mqtt_topic = "SB/API/" + MAC;
   connectWiFi();
-  MQTT.setServer(mqtt_host, mqtt_port);
+  MQTT.setServer(MQTT_HOST, MQTT_PORT);
   connectBroker();
 
   batton = xSemaphoreCreateMutex();
@@ -95,12 +102,16 @@ void setup() {
 
 void loop() {
   // Primary core tasks, such as communications here, to avoid unwanted behaviour.
+  checkConnectivity();
   xSemaphoreTake(batton, portMAX_DELAY);
   if(hasNewMessage) {
-      printMsg("[UpdateCycle] Update publish status: " + (String)MQTT.publish(stringToChar("DiabetiMark/API/State"), stringToChar(statusUpdateMessage)));
+      printMsg("[UpdateCycle] Update publish status: " + (String)MQTT.publish(stringToChar(mqtt_topic), stringToChar(statusUpdateMessage)));
       hasNewMessage = false;
+      /// === Expendability for listening to information ===
+      //MQTT.subscribe("");
   }
   xSemaphoreGive(batton);
+  MQTT.loop();
 }
 
 void coreTask_II( void * pvParameters ){
@@ -148,6 +159,13 @@ void printMsg(String msg){
 *   ============================================
 */
 
+void checkConnectivity(){
+  if(WiFi.status() != WL_CONNECTED)
+    connectWiFi();
+  if(!MQTT.connected())
+    connectBroker();
+}
+
 void connectWiFi() {
   printMsg("[ConnectWiFi] Attempting to connect to: '" + (String)NET_SSID + "'.");
   while(WiFi.status() != WL_CONNECTED){
@@ -159,17 +177,26 @@ void connectWiFi() {
 
 void connectBroker() {
   while(!MQTT.connected()){
-    // TODO: Make dynamic. Or based on unit.
-    printMsg("[MQTT] Attempt connecting to: ''" + (String)mqtt_user + "'.");
-    if(MQTT.connect("UNIT_ID_GOES_HERE", mqtt_user, mqtt_pass)){
+    printMsg("[MQTT] Attempt connecting to: ''" + (String)MQTT_USER + "'.");
+    if(MQTT.connect(stringToChar(MAC), MQTT_USER, MQTT_PASS)){
       // Connected
       printMsg("[MQTT] Connected to the broker aswell!");
     }else{
       // Not connected.
-      printMsg("[MQTT] Couldn't connect to: ''" + (String)mqtt_user + "'.");
+      printMsg("[MQTT] Couldn't connect to: ''" + (String)MQTT_USER + "'.");
       delay(5000);
     }
   }
+}
+
+void callback(char* topic, byte* payload, unsigned int length) {
+  Serial.print("Message arrived [");
+  Serial.print(topic);
+  Serial.print("] ");
+  for (int i=0;i<length;i++) {
+    Serial.print((char)payload[i]);
+  }
+  Serial.println();
 }
 /*
 *   ============================================
